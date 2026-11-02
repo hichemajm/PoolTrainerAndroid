@@ -124,10 +124,9 @@ class MainActivity : Activity() {
 
     private fun refreshStatus() {
         if (!::status.isInitialized) return
-        status.text = "OVERLAY PERMISSION     " + if (Settings.canDrawOverlays(this)) "READY" else "REQUIRED"
-            .let { it } + "\\nUSAGE ACCESS                 " +
-            (if (ForegroundGameGate.hasUsageAccess(this)) "READY" else "REQUIRED") +
-            "\\nTARGET                                  8 BALL POOL"
+        status.text = "OVERLAY PERMISSION     ${if (Settings.canDrawOverlays(this)) "READY" else "REQUIRED"}" +
+            "\nUSAGE ACCESS                 ${if (ForegroundGameGate.hasUsageAccess(this)) "READY" else "REQUIRED"}" +
+            "\nTARGET                                  8 BALL POOL"
     }
 
     private fun beginCaptureFlow() {
