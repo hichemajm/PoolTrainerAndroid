@@ -21,6 +21,7 @@ import androidx.core.content.ContextCompat
 
 class MainActivity : Activity() {
     private val captureRequest = 4102
+    private lateinit var status: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,65 +37,85 @@ class MainActivity : Activity() {
     private fun buildScreen() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(28), dp(24), dp(24))
-            setBackgroundColor(Color.rgb(10, 10, 12))
+            setPadding(dp(22), dp(28), dp(22), dp(24))
+            setBackgroundColor(Color.rgb(8, 8, 9))
+        }
+        val brand = TextView(this).apply {
+            text = "8"
+            textSize = 46f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(Color.rgb(20, 105, 62))
+                setStroke(dp(3), Color.rgb(180, 28, 36))
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(76), dp(76)).apply {
+                gravity = Gravity.CENTER
+                bottomMargin = dp(14)
+            }
         }
         val title = TextView(this).apply {
-            text = "POOL TRAINER"
-            textSize = 27f
+            text = "AIM TOOL FOR 8 BALL"
+            textSize = 22f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            letterSpacing = 0.045f
             setTextColor(Color.WHITE)
-            letterSpacing = 0.08f
             gravity = Gravity.CENTER
         }
         val subtitle = TextView(this).apply {
-            text = "PRACTICE ASSISTANT  •  VERSION 0.2.0"
-            textSize = 11f
-            setTextColor(Color.rgb(0, 170, 230))
+            text = "PRACTICE ASSISTANT  •  VERSION 1.0.0"
+            textSize = 10f
+            letterSpacing = 0.08f
+            setTextColor(Color.rgb(205, 45, 51))
             gravity = Gravity.CENTER
             setPadding(0, dp(8), 0, dp(24))
         }
         val description = TextView(this).apply {
-            text = "Screen analysis is limited to the 8 Ball Pool app. The guide stays hidden on your home screen and in other apps."
+            text = "Automatic aiming guides for 8 Ball Pool. Screen analysis runs locally and only after your permission."
             textSize = 14f
-            setTextColor(Color.LTGRAY)
+            setTextColor(Color.rgb(195, 195, 198))
             gravity = Gravity.CENTER
-            setPadding(dp(8), 0, dp(8), dp(22))
+            setPadding(dp(8), 0, dp(8), dp(20))
         }
-        val status = TextView(this).apply {
-            tag = "status"
+        status = TextView(this).apply {
             textSize = 13f
-            setTextColor(Color.rgb(210, 210, 210))
-            setPadding(dp(16), dp(14), dp(16), dp(14))
-            setBackgroundColor(Color.rgb(25, 25, 29))
+            setTextColor(Color.rgb(225, 225, 225))
+            setPadding(dp(16), dp(15), dp(16), dp(15))
+            background = panel()
         }
+        root.addView(brand)
         root.addView(title)
         root.addView(subtitle)
         root.addView(description)
         root.addView(status)
         root.addView(spacer(18))
-        root.addView(actionButton("1. Allow display over other apps") {
+        root.addView(sectionLabel("PERMISSIONS"))
+        root.addView(actionButton("Allow display over other apps") {
             if (!Settings.canDrawOverlays(this)) {
                 startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + packageName)))
             }
         })
-        root.addView(actionButton("2. Allow usage access") {
+        root.addView(actionButton("Allow usage access") {
             if (!ForegroundGameGate.hasUsageAccess(this)) startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
         })
-        root.addView(actionButton("3. Start screen analysis") {
-            beginCaptureFlow()
-        }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(8) })
-        root.addView(actionButton("Stop training overlay") {
+        root.addView(spacer(12))
+        root.addView(sectionLabel("AIM ASSIST"))
+        root.addView(actionButton("START AIM GUIDE") { beginCaptureFlow() }, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(7) })
+        root.addView(actionButton("STOP AIM GUIDE") {
             stopService(Intent(this, CaptureOverlayService::class.java))
+            toast("Aim guide stopped.")
         })
-        root.addView(actionButton("Open 8 Ball Pool") {
+        root.addView(actionButton("OPEN 8 BALL POOL") {
             val launch = packageManager.getLaunchIntentForPackage(ForegroundGameGate.GAME_PACKAGE)
             if (launch != null) startActivity(launch)
-            else showMessage("8 Ball Pool was not found. Install it from Google Play first.")
+            else toast("8 Ball Pool was not found on this device.")
         })
         val note = TextView(this).apply {
-            text = "Important: detection is experimental and may need calibration for your screen layout. Use for offline practice only. It does not tap, move the cue or automate shots."
-            textSize = 12f
-            setTextColor(Color.rgb(145, 145, 150))
+            text = "Detection is experimental. Ball recognition and bank-shot paths must be calibrated against real practice-game screenshots. This app never controls the cue or plays shots for you."
+            textSize = 11f
+            setTextColor(Color.rgb(130, 130, 135))
             setPadding(dp(4), dp(22), dp(4), 0)
         }
         root.addView(note)
@@ -102,33 +123,21 @@ class MainActivity : Activity() {
     }
 
     private fun refreshStatus() {
-        val status = findViewWithTag(window.decorView, "status") as? TextView ?: return
-        val overlay = Settings.canDrawOverlays(this)
-        val usage = ForegroundGameGate.hasUsageAccess(this)
-        status.text = "Overlay permission: " + (if (overlay) "READY" else "REQUIRED") +
-            "\nUsage access: " + (if (usage) "READY" else "REQUIRED") +
-            "\nTarget game: 8 Ball Pool"
-    }
-
-    private fun findViewWithTag(view: View, tag: Any): View? {
-        if (view.tag == tag) return view
-        if (view is android.view.ViewGroup) {
-            for (i in 0 until view.childCount) {
-                val found = findViewWithTag(view.getChildAt(i), tag)
-                if (found != null) return found
-            }
-        }
-        return null
+        if (!::status.isInitialized) return
+        status.text = "OVERLAY PERMISSION     " + if (Settings.canDrawOverlays(this)) "READY" else "REQUIRED"
+            .let { it } + "\\nUSAGE ACCESS                 " +
+            (if (ForegroundGameGate.hasUsageAccess(this)) "READY" else "REQUIRED") +
+            "\\nTARGET                                  8 BALL POOL"
     }
 
     private fun beginCaptureFlow() {
         if (!Settings.canDrawOverlays(this)) {
-            showMessage("First allow display over other apps.")
+            toast("Allow display over other apps first.")
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + packageName)))
             return
         }
         if (!ForegroundGameGate.hasUsageAccess(this)) {
-            showMessage("First allow usage access so the overlay can stay hidden outside the game.")
+            toast("Allow usage access first so the overlay can stay hidden outside the game.")
             startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
             return
         }
@@ -139,41 +148,61 @@ class MainActivity : Activity() {
     @Deprecated("Legacy activity result callback")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == captureRequest && resultCode == RESULT_OK && data != null) {
-            val service = Intent(this, CaptureOverlayService::class.java).apply {
-                putExtra(CaptureOverlayService.EXTRA_RESULT_CODE, resultCode)
-                putExtra(CaptureOverlayService.EXTRA_RESULT_DATA, data)
+        if (requestCode == captureRequest) {
+            if (resultCode == RESULT_OK && data != null) {
+                val service = Intent(this, CaptureOverlayService::class.java).apply {
+                    putExtra(CaptureOverlayService.EXTRA_RESULT_CODE, resultCode)
+                    putExtra(CaptureOverlayService.EXTRA_RESULT_DATA, data)
+                }
+                ContextCompat.startForegroundService(this, service)
+                toast("Screen analysis started. Open 8 Ball Pool.")
+            } else {
+                toast("Screen capture was not allowed.")
             }
-            ContextCompat.startForegroundService(this, service)
-            showMessage("Screen analysis started. Open 8 Ball Pool; the guide appears only there.")
         }
     }
 
     private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 4103)
-        }
+        ) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 4103)
     }
 
-    private fun actionButton(label: String, action: () -> Unit): Button {
+    private fun actionButton(label: String, action: () -> Unit, params: LinearLayout.LayoutParams? = null): Button {
         return Button(this).apply {
             text = label
             isAllCaps = false
-            textSize = 14f
+            textSize = 13f
             setTextColor(Color.WHITE)
-            setBackgroundColor(Color.rgb(42, 42, 48))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dp(9).toFloat()
+                setColor(if (label == "START AIM GUIDE") Color.rgb(145, 22, 30) else Color.rgb(30, 30, 33))
+                setStroke(dp(1), Color.rgb(54, 54, 58))
+            }
             setOnClickListener { action() }
-            layoutParams = LinearLayout.LayoutParams(-1, dp(50)).apply { topMargin = dp(7) }
+            layoutParams = params ?: LinearLayout.LayoutParams(-1, dp(49)).apply { topMargin = dp(7) }
         }
+    }
+
+    private fun sectionLabel(value: String) = TextView(this).apply {
+        text = value
+        textSize = 10f
+        letterSpacing = 0.13f
+        setTextColor(Color.rgb(160, 160, 164))
+        setPadding(dp(3), dp(5), 0, dp(4))
+    }
+
+    private fun panel() = android.graphics.drawable.GradientDrawable().apply {
+        cornerRadius = dp(10).toFloat()
+        setColor(Color.rgb(24, 24, 27))
+        setStroke(dp(1), Color.rgb(47, 47, 51))
     }
 
     private fun spacer(height: Int) = View(this).apply {
         layoutParams = LinearLayout.LayoutParams(1, dp(height))
     }
 
-    private fun showMessage(message: String) {
+    private fun toast(message: String) {
         android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
     }
 
