@@ -48,7 +48,7 @@ class GuideOverlay(context: Context) : View(context) {
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        if (!gameActive) return
+        if (!gameActive || !GuidePrefs.enabled(context, GuidePrefs.AI_GUIDE)) return
         val current = balls
         val cue = current.firstOrNull { it.isCue } ?: return
         val objects = current.filter { !it.isCue }
@@ -56,10 +56,12 @@ class GuideOverlay(context: Context) : View(context) {
             hypot((it.x-cue.x).toDouble(), (it.y-cue.y).toDouble())
         } ?: return
 
-        current.forEach {
-            canvas.drawCircle(it.x, it.y, it.radius, if (it.isCue) cuePaint else ballPaint)
+        if (GuidePrefs.enabled(context, GuidePrefs.LINE_GUIDES)) {
+            current.forEach {
+                canvas.drawCircle(it.x, it.y, it.radius, if (it.isCue) cuePaint else ballPaint)
+            }
+            canvas.drawCircle(target.x, target.y, target.radius + 4f, targetPaint)
         }
-        canvas.drawCircle(target.x, target.y, target.radius + 4f, targetPaint)
 
         val dx = target.x-cue.x
         val dy = target.y-cue.y
@@ -68,8 +70,22 @@ class GuideOverlay(context: Context) : View(context) {
         val uy = dy/length
         val ghostX = target.x-ux*(cue.radius+target.radius)
         val ghostY = target.y-uy*(cue.radius+target.radius)
-        canvas.drawLine(cue.x,cue.y,ghostX,ghostY,guidePaint)
-        canvas.drawCircle(ghostX,ghostY,target.radius*0.72f,targetPaint)
+        if (GuidePrefs.enabled(context, GuidePrefs.LINE_GUIDES)) {
+            canvas.drawLine(cue.x,cue.y,ghostX,ghostY,guidePaint)
+            canvas.drawCircle(ghostX,ghostY,target.radius*0.72f,targetPaint)
+        }
+        if (GuidePrefs.enabled(context, GuidePrefs.EXTENDED_LINES)) {
+            val edge = rayToTableEdge(ghostX, ghostY, ux, uy,
+                width*0.195f, width*0.805f, height*0.232f, height*0.915f)
+            if (edge != null) {
+                val extendedPaint = Paint(guidePaint).apply {
+                    color = Color.WHITE
+                    pathEffect = null
+                    strokeWidth = 2.2f
+                }
+                canvas.drawLine(ghostX, ghostY, edge.first, edge.second, extendedPaint)
+            }
+        }
 
         // Calibrated to the playable cloth, not the phone screen edges.
         val left = width*0.195f
@@ -87,7 +103,8 @@ class GuideOverlay(context: Context) : View(context) {
         canvas.drawCircle(pocket.first,pocket.second,10f,pocketPaint)
 
         // A one-cushion reflected target path is shown as a secondary practice line.
-        val bank = reflectedBankPoint(target.x,target.y,pocket.first,pocket.second,left,right,top,bottom)
+        val bank = if (GuidePrefs.enabled(context, GuidePrefs.BANK_SHOTS))
+            reflectedBankPoint(target.x,target.y,pocket.first,pocket.second,left,right,top,bottom) else null
         if (bank != null) {
             val path = Path().apply {
                 moveTo(target.x,target.y)
@@ -101,6 +118,28 @@ class GuideOverlay(context: Context) : View(context) {
             }
             canvas.drawPath(path,bankPaint)
         }
+    }
+
+    private fun rayToTableEdge(
+        sx: Float, sy: Float, dx: Float, dy: Float,
+        left: Float, right: Float, top: Float, bottom: Float
+    ): Pair<Float,Float>? {
+        val hits = mutableListOf<Pair<Float,Pair<Float,Float>>>()
+        if (dx > 0f) {
+            val t=(right-sx)/dx; val y=sy+t*dy
+            if (t>0f && y in top..bottom) hits.add(t to (right to y))
+        } else if (dx < 0f) {
+            val t=(left-sx)/dx; val y=sy+t*dy
+            if (t>0f && y in top..bottom) hits.add(t to (left to y))
+        }
+        if (dy > 0f) {
+            val t=(bottom-sy)/dy; val x=sx+t*dx
+            if (t>0f && x in left..right) hits.add(t to (x to bottom))
+        } else if (dy < 0f) {
+            val t=(top-sy)/dy; val x=sx+t*dx
+            if (t>0f && x in left..right) hits.add(t to (x to top))
+        }
+        return hits.minByOrNull { it.first }?.second
     }
 
     private fun reflectedBankPoint(
