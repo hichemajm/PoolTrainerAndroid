@@ -34,23 +34,26 @@ object ForegroundGameGate {
         return try {
             val manager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
             val now = System.currentTimeMillis()
-            val events = manager.queryEvents(now - 10 * 60 * 1000L, now)
+            val events = manager.queryEvents(now - 2 * 60 * 1000L, now)
             val event = UsageEvents.Event()
-            var foregroundPackage: String? = null
+            var latestTime = -1L
+            var latestPackage: String? = null
+            var latestIsForeground = false
+
             while (events.hasNextEvent()) {
                 events.getNextEvent(event)
                 val type = event.eventType
-                if (type == UsageEvents.Event.MOVE_TO_FOREGROUND ||
+                val isForeground = type == UsageEvents.Event.MOVE_TO_FOREGROUND ||
                     (Build.VERSION.SDK_INT >= 29 && type == UsageEvents.Event.ACTIVITY_RESUMED)
-                ) {
-                    foregroundPackage = event.packageName
-                } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND ||
+                val isBackground = type == UsageEvents.Event.MOVE_TO_BACKGROUND ||
                     (Build.VERSION.SDK_INT >= 29 && type == UsageEvents.Event.ACTIVITY_PAUSED)
-                ) {
-                    if (foregroundPackage == event.packageName) foregroundPackage = null
+                if ((isForeground || isBackground) && event.timeStamp >= latestTime) {
+                    latestTime = event.timeStamp
+                    latestPackage = event.packageName
+                    latestIsForeground = isForeground
                 }
             }
-            foregroundPackage == GAME_PACKAGE
+            latestIsForeground && latestPackage == GAME_PACKAGE
         } catch (_: Exception) {
             false
         }
