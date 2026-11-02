@@ -173,7 +173,7 @@ class MainActivity : Activity() {
         ) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 4103)
     }
 
-    private fun actionButton(label: String, action: () -> Unit, params: LinearLayout.LayoutParams? = null): Button {
+    private fun actionButton(label: String, params: LinearLayout.LayoutParams? = null, action: () -> Unit): Button {
         return Button(this).apply {
             text = label
             isAllCaps = false
