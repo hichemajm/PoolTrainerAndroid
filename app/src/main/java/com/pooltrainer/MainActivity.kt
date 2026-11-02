@@ -16,6 +16,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.Switch
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 
@@ -102,6 +103,11 @@ class MainActivity : Activity() {
         })
         root.addView(spacer(12))
         root.addView(sectionLabel("AIM ASSIST"))
+        root.addView(featureSwitch("AI Guide Tools", GuidePrefs.AI_GUIDE))
+        root.addView(featureSwitch("Line Guidelines", GuidePrefs.LINE_GUIDES))
+        root.addView(featureSwitch("Auto Extended Lines", GuidePrefs.EXTENDED_LINES))
+        root.addView(featureSwitch("Back Shots or Kick Shot", GuidePrefs.BANK_SHOTS))
+        root.addView(featureSwitch("Privacy Protection System", "privacy_protection", fixedOn = true))
         root.addView(actionButton("START AIM GUIDE") { beginCaptureFlow() }, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(7) })
         root.addView(actionButton("STOP AIM GUIDE") {
             stopService(Intent(this, CaptureOverlayService::class.java))
@@ -180,6 +186,20 @@ class MainActivity : Activity() {
             }
             setOnClickListener { action() }
             layoutParams = params ?: LinearLayout.LayoutParams(-1, dp(49)).apply { topMargin = dp(7) }
+        }
+    }
+
+    private fun featureSwitch(label: String, key: String, fixedOn: Boolean = false): Switch {
+        return Switch(this).apply {
+            text = label
+            textSize = 13f
+            setTextColor(Color.rgb(225, 225, 225))
+            isChecked = if (fixedOn) true else GuidePrefs.enabled(this@MainActivity, key)
+            isEnabled = !fixedOn
+            setPadding(dp(5), dp(7), dp(5), dp(7))
+            setOnCheckedChangeListener { _, checked ->
+                if (!fixedOn) GuidePrefs.set(this@MainActivity, key, checked)
+            }
         }
     }
 
