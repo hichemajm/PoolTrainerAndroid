@@ -1,25 +1,29 @@
-# Pool Trainer Android
+# Aim Tool For 8 Ball — independent Android rebuild
 
-Pool Trainer is an experimental Android practice overlay for 8 Ball Pool.
+An independent, privacy-first practice overlay inspired by the feature set of the user-provided Aim Tool For 8 Ball APK. This project does not reuse its code, assets, ads, analytics, or network services.
 
-## Version 0.2.0 changes
-- Analysis is gated to the 8 Ball Pool package (com.miniclip.eightballpool).
-- The overlay is hidden when another app or the Android home screen is in the foreground.
-- Ball candidates are limited to a central play-field region, filtered by size and rim contrast, deduplicated and capped.
-- The overlay is drawn only after a plausible cue ball and at least one object ball are detected.
-- Added a persistent notification with a Stop action.
-- Uses Android MediaProjection consent and the system overlay permission; no hidden capture or input automation.
+## Target
+- Android 8.0+ (API 26+)
+- ARM64 Android devices
+- Target device: Android 14 / Realme 10
 
-## Important limitations
-This is not a certified or guaranteed-accuracy detector. 8 Ball Pool layouts, device resolutions, animations, table skins and UI changes can affect detection. The current detector uses classical OpenCV circle detection and conservative pixel checks; it does not use a trained object-detection model. Test with offline practice before relying on any guide.
+## Planned feature parity
+- Automatic table and ball recognition from user-approved screen capture
+- Extended cue-ball aiming guide
+- Object-ball contact / ghost-ball guide
+- Cushion (bank) and kick-shot path calculations
+- Optional multi-line guide display
 
-The guide estimates a ghost-ball contact point and a nearest-pocket route. It is a visual training aid only, not a physics-perfect solver. It does not automate taps, cue movement or shots. Use in accordance with the game's rules.
+## Privacy and safety
+- No ads, analytics SDKs, accounts, or network requests.
+- Screen capture begins only after Android's system MediaProjection consent dialog.
+- Overlay and Usage Access are separately explained and user-controlled.
+- Overlay is intended to appear only while 8 Ball Pool is foregrounded.
+- No taps, input injection, memory access, game modification, or automated shots.
+- Capture frames are processed locally and discarded; no image storage.
+
+## Accuracy status
+This is an experimental computer-vision project. A successful APK build only confirms compilation, not accurate detection. Detection must be validated on real 8 Ball Pool practice screenshots from the target phone. Cushion calculations require calibrated table bounds and ball radius; they are not enabled as trusted guidance until validated.
 
 ## Build
-The GitHub Actions workflow builds the debug APK with Java 17 and Gradle 8.9. Download the artifact from the successful workflow run.
-
-## Permissions
-- Display over other apps: needed for the visual guide.
-- Usage access: used only to show the overlay while 8 Ball Pool is the foreground app.
-- Screen capture: granted by Android's MediaProjection confirmation dialog for each session.
-- Notifications: used for the foreground service and Stop action.
+GitHub Actions runs gradle testDebugUnitTest assembleDebug and uploads the debug APK as a workflow artifact.
