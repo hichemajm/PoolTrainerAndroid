@@ -22,10 +22,10 @@ data class Ball(
 object BallDetector {
     // Normalized playing-cloth bounds for the landscape 8 Ball Pool table.
     // HUD, cue power controls, side rails and player panels are excluded.
-    private const val TABLE_LEFT = 0.155f
-    private const val TABLE_TOP = 0.155f
-    private const val TABLE_RIGHT = 0.845f
-    private const val TABLE_BOTTOM = 0.992f
+    private const val TABLE_LEFT = 0.190f
+    private const val TABLE_TOP = 0.225f
+    private const val TABLE_RIGHT = 0.810f
+    private const val TABLE_BOTTOM = 0.925f
 
     fun detect(bitmap: Bitmap): List<Ball> {
         if (bitmap.width < 320 || bitmap.height < 180) return emptyList()
@@ -122,6 +122,8 @@ object BallDetector {
         var inner = 0.0
         var rim = 0.0
         var outside = 0.0
+        var ringSaturation = 0.0
+        var ringBrightness = 0.0
         var samples = 0
         for (angle in 0 until 16) {
             val a = angle * Math.PI / 8.0
@@ -138,18 +140,32 @@ object BallDetector {
             inner += iv
             rim += rv
             outside += ov
+            val ringX = (cx + cos(a)*radius*0.58).toInt()
+            val ringY = (cy + sin(a)*radius*0.58).toInt()
+            val ring = mat.get(ringY, ringX)
+            if (ring != null && ring.size >= 3) {
+                val hi = max(ring[0], max(ring[1], ring[2]))
+                val lo = min(ring[0], min(ring[1], ring[2]))
+                ringSaturation += hi-lo
+                ringBrightness += (ring[0]+ring[1]+ring[2])/3.0
+            }
             samples++
         }
         if (samples < 12) return null
         inner /= samples
         rim /= samples
         outside /= samples
+        ringSaturation /= samples
+        ringBrightness /= samples
         val fillContrast = inner - outside
         val edgeContrast = rim - outside
         if (fillContrast < 12.0 || edgeContrast < 3.0) return null
 
-        val isCue = brightness > 174.0 && saturation < 68.0
-        val cueScore = if (isCue) 0.18 else 0.0
+        // A stripe ball can have a white number disc at its center. Classify
+        // from the wider colored ring instead of the tiny center patch.
+        val isCue = brightness > 170.0 && ringBrightness > 150.0 &&
+            ringSaturation < 58.0 && saturation < 82.0
+        val cueScore = if (isCue) 0.22 else 0.0
         val confidence = ((fillContrast/115.0)*0.48 +
             (edgeContrast/80.0)*0.22 +
             (brightness/255.0)*0.18 +
