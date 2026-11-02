@@ -20,6 +20,13 @@ data class Ball(
 )
 
 object BallDetector {
+    // Normalized playing-cloth bounds for the landscape 8 Ball Pool table.
+    // HUD, cue power controls, side rails and player panels are excluded.
+    private const val TABLE_LEFT = 0.155f
+    private const val TABLE_TOP = 0.155f
+    private const val TABLE_RIGHT = 0.845f
+    private const val TABLE_BOTTOM = 0.992f
+
     fun detect(bitmap: Bitmap): List<Ball> {
         if (bitmap.width < 320 || bitmap.height < 180) return emptyList()
         val rgba = Mat()
@@ -28,20 +35,22 @@ object BallDetector {
         var roi: Mat? = null
         return try {
             Utils.bitmapToMat(bitmap, rgba)
-            // Exclude most side rails, menu controls and status elements.
-            val left = (bitmap.width * 0.045f).toInt()
-            val top = (bitmap.height * 0.055f).toInt()
-            val right = (bitmap.width * 0.955f).toInt()
-            val bottom = (bitmap.height * 0.945f).toInt()
-            roi = rgba.submat(Rect(left, top, (right - left).coerceAtLeast(1), (bottom - top).coerceAtLeast(1)))
+            val left = (bitmap.width * TABLE_LEFT).toInt()
+            val top = (bitmap.height * TABLE_TOP).toInt()
+            val right = (bitmap.width * TABLE_RIGHT).toInt()
+            val bottom = (bitmap.height * TABLE_BOTTOM).toInt()
+            roi = rgba.submat(Rect(left, top, (right-left).coerceAtLeast(1), (bottom-top).coerceAtLeast(1)))
             Imgproc.cvtColor(roi, gray, Imgproc.COLOR_RGBA2GRAY)
-            Imgproc.GaussianBlur(gray, gray, Size(5.0, 5.0), 1.15)
+            Imgproc.GaussianBlur(gray, gray, Size(5.0, 5.0), 1.1)
 
+            // Ball diameter is approximately 2.2–2.8% of the short screen dimension.
             val minDim = min(bitmap.width, bitmap.height).toDouble()
-            val minRadius = max(7, (minDim * 0.0105).toInt())
-            val maxRadius = max(minRadius + 2, (minDim * 0.030).toInt())
-            Imgproc.HoughCircles(gray, circles, Imgproc.HOUGH_GRADIENT, 1.15,
-                minDim * 0.026, 105.0, 27.0, minRadius, maxRadius)
+            val minRadius = max(7, (minDim * 0.014).toInt())
+            val maxRadius = max(minRadius + 2, (minDim * 0.034).toInt())
+            Imgproc.HoughCircles(
+                gray, circles, Imgproc.HOUGH_GRADIENT, 1.12,
+                minDim * 0.030, 100.0, 24.0, minRadius, maxRadius
+            )
 
             val candidates = mutableListOf<Ball>()
             for (i in 0 until circles.cols()) {
@@ -50,26 +59,27 @@ object BallDetector {
                 val x = values[0].toFloat() + left
                 val y = values[1].toFloat() + top
                 val radius = values[2].toFloat()
-                if (x < bitmap.width * 0.075f || x > bitmap.width * 0.925f) continue
-                if (y < bitmap.height * 0.09f || y > bitmap.height * 0.91f) continue
+                if (x < bitmap.width * TABLE_LEFT || x > bitmap.width * TABLE_RIGHT) continue
+                if (y < bitmap.height * TABLE_TOP || y > bitmap.height * TABLE_BOTTOM) continue
                 val sample = sampleBall(rgba, x.toInt(), y.toInt(), radius) ?: continue
-                if (sample.confidence < 0.34f) continue
+                if (sample.confidence < 0.43f) continue
                 candidates.add(Ball(x, y, radius, sample.isCue, sample.confidence))
             }
 
-            // Non-maximum suppression: nearby detections are usually one ball.
             val selected = mutableListOf<Ball>()
             for (candidate in candidates.sortedByDescending { it.confidence }) {
                 val overlaps = selected.any {
                     val dx = it.x - candidate.x
                     val dy = it.y - candidate.y
-                    val minDistance = max(it.radius, candidate.radius) * 1.45f
-                    dx * dx + dy * dy < minDistance * minDistance
+                    val minDistance = max(it.radius, candidate.radius) * 1.55f
+                    dx*dx + dy*dy < minDistance*minDistance
                 }
                 if (!overlaps) selected.add(candidate)
                 if (selected.size >= 16) break
             }
 
+            // The cue ball is the brightest low-saturation ball, not simply the
+            // brightest circle anywhere on the screen.
             val cue = selected.filter { it.isCue }.maxByOrNull { it.confidence }
                 ?: return emptyList()
             val objects = selected.filter { !it.isCue }
@@ -88,50 +98,62 @@ object BallDetector {
     private data class Sample(val isCue: Boolean, val confidence: Float)
 
     private fun sampleBall(mat: Mat, cx: Int, cy: Int, radius: Float): Sample? {
-        if (cx < 2 || cy < 2 || cx >= mat.cols() - 2 || cy >= mat.rows() - 2) return null
-        var centerBrightness = 0.0
-        var centerSaturation = 0.0
-        var centerCount = 0
-        for (dy in -2..2 step 2) for (dx in -2..2 step 2) {
-            val p = mat.get(cy + dy, cx + dx) ?: continue
+        if (cx < 3 || cy < 3 || cx >= mat.cols()-3 || cy >= mat.rows()-3) return null
+        var brightness = 0.0
+        var saturation = 0.0
+        var count = 0
+        // Sample the inner disk, avoiding the specular highlight at the very center.
+        for (dy in -3..3 step 2) for (dx in -3..3 step 2) {
+            val p = mat.get(cy+dy, cx+dx) ?: continue
             if (p.size < 3) continue
             val hi = max(p[0], max(p[1], p[2]))
             val lo = min(p[0], min(p[1], p[2]))
-            centerBrightness += (p[0] + p[1] + p[2]) / 3.0
-            centerSaturation += hi - lo
-            centerCount++
-        }
-        if (centerCount == 0) return null
-        centerBrightness /= centerCount
-        centerSaturation /= centerCount
-        if (centerBrightness < 72.0) return null
-
-        // A real ball normally has a bright rim against the felt/background.
-        var inner = 0.0
-        var outer = 0.0
-        var count = 0
-        for (angle in 0 until 12) {
-            val a = angle * Math.PI / 6.0
-            val ix = (cx + cos(a) * radius * 0.58).toInt()
-            val iy = (cy + sin(a) * radius * 0.58).toInt()
-            val ox = (cx + cos(a) * radius * 1.02).toInt()
-            val oy = (cy + sin(a) * radius * 1.02).toInt()
-            if (ix !in 0 until mat.cols() || iy !in 0 until mat.rows()) continue
-            if (ox !in 0 until mat.cols() || oy !in 0 until mat.rows()) continue
-            val pi = mat.get(iy, ix) ?: continue
-            val po = mat.get(oy, ox) ?: continue
-            inner += (pi[0] + pi[1] + pi[2]) / 3.0
-            outer += (po[0] + po[1] + po[2]) / 3.0
+            brightness += (p[0]+p[1]+p[2])/3.0
+            saturation += hi-lo
             count++
         }
-        if (count < 8) return null
-        inner /= count
-        outer /= count
-        val rimContrast = (inner - outer).coerceAtLeast(0.0)
-        val confidence = ((rimContrast / 70.0) * 0.62 +
-            (centerBrightness / 255.0) * 0.28 +
-            (1.0 - centerSaturation / 255.0) * 0.10).toFloat().coerceIn(0f, 1f)
-        val cue = centerBrightness > 185.0 && centerSaturation < 48.0 && rimContrast > 8.0
-        return Sample(cue, confidence)
+        if (count == 0) return null
+        brightness /= count
+        saturation /= count
+        if (brightness < 78.0) return null
+
+        // A ball has a bright interior and a darker boundary. A thin aiming-line
+        // ring generally has almost no filled interior and is rejected here.
+        var inner = 0.0
+        var rim = 0.0
+        var outside = 0.0
+        var samples = 0
+        for (angle in 0 until 16) {
+            val a = angle * Math.PI / 8.0
+            fun lum(scale: Double): Double? {
+                val x = (cx + cos(a)*radius*scale).toInt()
+                val y = (cy + sin(a)*radius*scale).toInt()
+                if (x !in 0 until mat.cols() || y !in 0 until mat.rows()) return null
+                val px = mat.get(y,x) ?: return null
+                return (px[0]+px[1]+px[2])/3.0
+            }
+            val iv = lum(0.42) ?: continue
+            val rv = lum(0.78) ?: continue
+            val ov = lum(1.12) ?: continue
+            inner += iv
+            rim += rv
+            outside += ov
+            samples++
+        }
+        if (samples < 12) return null
+        inner /= samples
+        rim /= samples
+        outside /= samples
+        val fillContrast = inner - outside
+        val edgeContrast = rim - outside
+        if (fillContrast < 12.0 || edgeContrast < 3.0) return null
+
+        val isCue = brightness > 174.0 && saturation < 68.0
+        val cueScore = if (isCue) 0.18 else 0.0
+        val confidence = ((fillContrast/115.0)*0.48 +
+            (edgeContrast/80.0)*0.22 +
+            (brightness/255.0)*0.18 +
+            (1.0-saturation/255.0)*0.12 + cueScore).toFloat().coerceIn(0f,1f)
+        return Sample(isCue, confidence)
     }
 }
